@@ -1,0 +1,852 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../bloc/booking_bloc.dart';
+
+class BookingFlowScreen extends StatefulWidget {
+  const BookingFlowScreen({super.key});
+
+  @override
+  State<BookingFlowScreen> createState() => _BookingFlowScreenState();
+}
+
+class _BookingFlowScreenState extends State<BookingFlowScreen> {
+  int _currentStep = 1; // 1: Schedule, 2: Location, 3: Details
+  int _selectedDayIndex = 1; // Tue 15 is pre-selected
+  String _selectedSlot = 'Afternoon'; // Afternoon slot pre-selected
+  final TextEditingController _aptController = TextEditingController();
+  final TextEditingController _instructionsController = TextEditingController();
+  String _entryMethod = 'I\'ll be home to let them in';
+
+  @override
+  void dispose() {
+    _aptController.dispose();
+    _instructionsController.dispose();
+    super.dispose();
+  }
+
+  void _nextStep(int step) {
+    setState(() {
+      _currentStep = step;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final routeArgs = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final provider = routeArgs?['provider'] ?? {
+      'name': 'Dr. Arjun Mehta',
+      'rate': 850,
+      'rateUnit': '/visit',
+    };
+
+    final String providerName = provider['name'] ?? 'Dr. Arjun Mehta';
+    final int providerRate = provider['rate'] ?? 850;
+
+    return BlocListener<BookingBloc, BookingState>(
+      listener: (context, state) {
+        if (state is BookingCreated) {
+          // Reload local cache list so they appear in bookings tab
+          context.read<BookingBloc>().add(LoadBookingsEvent());
+          
+          Navigator.pushNamed(context, '/booking_confirmation', arguments: {
+            'providerName': providerName,
+            'totalEstimate': providerRate,
+            'selectedDay': _selectedDayIndex + 14,
+            'selectedSlot': _selectedSlot,
+            'address': 'Sector 62, Noida, UP',
+            'entryMethod': _entryMethod,
+          });
+        } else if (state is BookingError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.background, // aligned background
+        appBar: AppBar(
+          backgroundColor: AppTheme.surfaceContainerLowest,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: IconButton(
+            onPressed: () {
+              if (_currentStep > 1) {
+                _nextStep(_currentStep - 1);
+              } else {
+                Navigator.pop(context);
+              }
+            },
+            icon: const Icon(Icons.arrow_back, color: AppTheme.primaryContainer),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.location_on, color: AppTheme.primaryContainer),
+              const SizedBox(width: 8),
+              Text(
+                'VibrantCare',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: AppTheme.primaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              // 1. Progress Stepper Indicator
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                child: Row(
+                  children: [
+                    _buildStepIndicator(1, 'Schedule'),
+                    _buildStepDivider(1),
+                    _buildStepIndicator(2, 'Location'),
+                    _buildStepDivider(2),
+                    _buildStepIndicator(3, 'Details'),
+                  ],
+                ),
+              ),
+  
+              // 2. Step Contents
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: AppTheme.containerMargin),
+                  child: _buildStepContent(theme),
+                ),
+              ),
+  
+              // 3. Fixed Bottom Estimate & Confirm Panel
+              _buildBottomPanel(provider),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepIndicator(int stepNumber, String title) {
+    final isCompleted = _currentStep > stepNumber;
+    final isActive = _currentStep == stepNumber;
+
+    Color bg;
+    Widget child;
+    Color textColor;
+
+    if (isCompleted) {
+      bg = AppTheme.secondary;
+      child = const Icon(Icons.check, color: Colors.white, size: 16);
+      textColor = AppTheme.secondary;
+    } else if (isActive) {
+      bg = AppTheme.primaryContainer;
+      child = Text(
+        '$stepNumber',
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+      );
+      textColor = AppTheme.primaryContainer;
+    } else {
+      bg = AppTheme.surfaceContainerHighest;
+      child = Text(
+        '$stepNumber',
+        style: const TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 13),
+      );
+      textColor = AppTheme.onSurfaceVariant;
+    }
+
+    return Column(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: bg,
+            shape: BoxShape.circle,
+          ),
+          child: Center(child: child),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          title,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 11,
+            fontWeight: isActive || isCompleted ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepDivider(int afterStep) {
+    final isCompleted = _currentStep > afterStep;
+    return Expanded(
+      child: Container(
+        height: 2,
+        margin: const EdgeInsets.only(bottom: 16),
+        color: isCompleted ? AppTheme.secondary : AppTheme.outlineVariant,
+      ),
+    );
+  }
+
+  Widget _buildStepContent(ThemeData theme) {
+    switch (_currentStep) {
+      case 1:
+        return _buildScheduleStep(theme);
+      case 2:
+        return _buildLocationStep(theme);
+      case 3:
+        return _buildDetailsStep(theme);
+      default:
+        return _buildScheduleStep(theme);
+    }
+  }
+
+  Widget _buildScheduleStep(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Text(
+          'When do you need help?',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            color: AppTheme.onSurface,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Simple Calendar Grid Week Mock
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildCalendarDayButton(0, 'MON', '14'),
+            _buildCalendarDayButton(1, 'TUE', '15'),
+            _buildCalendarDayButton(2, 'WED', '16'),
+            _buildCalendarDayButton(3, 'THU', '17'),
+            _buildCalendarDayButton(4, 'FRI', '18'),
+            _buildCalendarDayButton(5, 'SAT', '19'),
+            _buildCalendarDayButton(6, 'SUN', '20'),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        const Text(
+          'Available Time Slots',
+          style: TextStyle(
+            color: AppTheme.onSurfaceVariant,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Time Slots
+        Row(
+          children: [
+            Expanded(
+              child: _buildTimeSlotCard(
+                slotName: 'Morning',
+                timeRange: '08:00 AM - 12:00 PM',
+                icon: Icons.wb_sunny,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildTimeSlotCard(
+                slotName: 'Afternoon',
+                timeRange: '01:00 PM - 05:00 PM',
+                icon: Icons.wb_twilight,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+
+        ElevatedButton(
+          onPressed: () => _nextStep(2),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryContainer,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            elevation: 0,
+          ),
+          child: const Text(
+            'Continue to Address',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCalendarDayButton(int index, String dayName, String dayNum) {
+    final isSelected = _selectedDayIndex == index;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedDayIndex = index;
+        });
+      },
+      child: Container(
+        width: 44,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryContainer : Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryContainer : const Color(0xFFD9D6CF),
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              dayName,
+              style: TextStyle(
+                color: isSelected ? Colors.white.withAlpha(204) : AppTheme.onSurfaceVariant.withAlpha(153),
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              dayNum,
+              style: TextStyle(
+                color: isSelected ? Colors.white : AppTheme.onSurface,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeSlotCard({
+    required String slotName,
+    required String timeRange,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedSlot == slotName;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedSlot = slotName;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryContainer.withAlpha(26) : Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryContainer : const Color(0xFFD9D6CF),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: AppTheme.primaryContainer, size: 24),
+            const SizedBox(height: 12),
+            Text(
+              slotName,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              timeRange,
+              style: TextStyle(
+                color: isSelected ? AppTheme.primaryContainer : AppTheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationStep(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Text(
+          'Confirm Service Address',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            color: AppTheme.onSurface,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Map Mock Container
+        Container(
+          height: 192,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.roundedLg),
+            border: Border.all(color: AppTheme.outlineVariant),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppTheme.roundedLg - 1),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.network(
+                    'https://lh3.googleusercontent.com/aida-public/AB6AXuAWH5TtdWQBebdsl8_eGZ1egji-12ExPFX_RqQZIdpobtZt2EKkj9u90Xp88PG7llXJwEaOe6PusTGn7lWCGrPXJ2wIQZzQjBuh2zXUnJcAuq93M7He5CQuQp5zHsQIeoz1mAJouFB64RLc2yk6VvqpCe1gSU0cjFtgj9kDWHLWsStmWOBgSYgtdTv2TnGxSyTXJSKrgDG4R4xysnaXkvESNB5MrYELVDtxTzvUDdBaM7S23ad-3MPKqrlNMS5D4OM3rwgRWNEkhDnI',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                      border: Border.all(color: AppTheme.outlineVariant),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.location_on, color: AppTheme.primaryContainer, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Sector 62, Noida, UP, 201301',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Change',
+                          style: TextStyle(
+                            color: AppTheme.primaryContainer,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        const Text(
+          'Apartment / Suite (Optional)',
+          style: TextStyle(
+            color: AppTheme.onSurfaceVariant,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+            border: Border.all(color: const Color(0xFFD9D6CF)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: TextField(
+              controller: _aptController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Apt 4B, Tower C',
+                hintStyle: TextStyle(color: Color(0x661E293B), fontSize: 14),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Info box
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+            border: Border.all(color: AppTheme.outlineVariant),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info, color: AppTheme.primaryContainer, size: 20),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Our service providers are verified for this area. Expect professional and safe arrivals.',
+                  style: TextStyle(
+                    color: AppTheme.onSurfaceVariant,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _nextStep(1),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.onSurface,
+                  side: const BorderSide(color: Color(0xFFD9D6CF)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text('Back', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                onPressed: () => _nextStep(3),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryContainer,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Add Instructions',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailsStep(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Text(
+          'Final Details',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            color: AppTheme.onSurface,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        const Text(
+          'Special Instructions for Provider',
+          style: TextStyle(
+            color: AppTheme.onSurface,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+            border: Border.all(color: const Color(0xFFD9D6CF)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: TextField(
+              controller: _instructionsController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: 'Mention pets, gate codes, or specific focus areas...',
+                hintStyle: TextStyle(color: Color(0x661E293B), fontSize: 14),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        const Text(
+          'Entry Method',
+          style: TextStyle(
+            color: AppTheme.onSurface,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        RadioGroup<String>(
+          groupValue: _entryMethod,
+          onChanged: (val) {
+            if (val != null) {
+              setState(() {
+                _entryMethod = val;
+              });
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildEntryRadioRow('I\'ll be home to let them in', Icons.person),
+              const SizedBox(height: 8),
+              _buildEntryRadioRow('Use hidden key / Digital lock', Icons.key),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Background Check Notification
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.background,
+            borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+            border: Border.all(color: AppTheme.outlineVariant),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.verified_user, color: AppTheme.primaryContainer, size: 20),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Background Checked Professional',
+                      style: TextStyle(
+                        color: AppTheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'All support staff have undergone rigorous identity and safety verification.',
+                      style: TextStyle(
+                        color: AppTheme.onSurfaceVariant,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+
+        OutlinedButton(
+          onPressed: () => _nextStep(2),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppTheme.onSurface,
+            side: const BorderSide(color: Color(0xFFD9D6CF)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+          child: const Text(
+            'Back to Location',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEntryRadioRow(String label, IconData icon) {
+    final isSelected = _entryMethod == label;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _entryMethod = label;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryContainer.withAlpha(26) : Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryContainer : const Color(0xFFD9D6CF),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: isSelected ? AppTheme.primaryContainer : AppTheme.onSurfaceVariant, size: 20),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+            Radio<String>(
+              value: label,
+              activeColor: AppTheme.primaryContainer,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomPanel(Map<String, dynamic> provider) {
+    final name = provider['name'] ?? 'Dr. Arjun Mehta';
+    final rate = provider['rate'] ?? 850;
+    final avatarUrl = provider['avatarUrl'] ?? '';
+    final specialty = provider['specialty'] ?? '';
+    final displayTotal = rate;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.inverseSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(26),
+            blurRadius: 12.0,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Row(
+                children: [
+                  Text(
+                    'Total Estimate',
+                    style: TextStyle(
+                      color: Color(0xCCB4EBFF),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(Icons.help_outline, color: Color(0x99B4EBFF), size: 13),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text.rich(
+                TextSpan(
+                  text: '₹$displayTotal',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  children: const [
+                    TextSpan(
+                      text: ' / visit',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0x99B4EBFF),
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          BlocBuilder<BookingBloc, BookingState>(
+            builder: (context, state) {
+              final isLoading = state is BookingLoading;
+              return ElevatedButton.icon(
+                onPressed: isLoading ? null : () {
+                  final bookingData = {
+                    'name': name,
+                    'avatarUrl': avatarUrl,
+                    'specialty': specialty,
+                    'schedule': 'Today, 2:00 PM',
+                    'date': 'Oct ${_selectedDayIndex + 14}, 2026',
+                    'address': 'Sector 62, Noida (Home)',
+                    'isAvailableNow': true,
+                    'hasTracking': true,
+                    'rate': rate,
+                    'entryMethod': _entryMethod,
+                  };
+                  context.read<BookingBloc>().add(CreateBookingEvent(bookingData));
+                },
+                icon: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          color: AppTheme.onSecondaryContainer,
+                          strokeWidth: 2.0,
+                        ),
+                      )
+                    : const Icon(Icons.lock, size: 16, color: AppTheme.onSecondaryContainer),
+                label: Text(
+                  isLoading ? 'Booking...' : 'Confirm Booking',
+                  style: const TextStyle(
+                    color: AppTheme.onSecondaryContainer,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.secondaryFixed,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.roundedFull),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  elevation: 4,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
