@@ -14,6 +14,8 @@ class BookingConfirmationScreen extends StatelessWidget {
     final int selectedDay = routeArgs?['selectedDay'] ?? 15;
     final String selectedSlot = routeArgs?['selectedSlot'] ?? 'Afternoon';
     final String address = routeArgs?['address'] ?? 'Sector 62, Noida, UP';
+    final String paymentMethod = routeArgs?['paymentMethod'] ?? 'UPI';
+    final String paymentStatus = routeArgs?['paymentStatus'] ?? 'Paid';
 
     final String slotTimeRange = selectedSlot == 'Morning'
         ? '08:00 AM - 12:00 PM'
@@ -198,8 +200,8 @@ class BookingConfirmationScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     _buildSummaryDetailRow(
                       icon: Icons.payments,
-                      title: 'Total Paid',
-                      value: '₹$displayTotal',
+                      title: paymentStatus == 'Paid' ? 'Total Paid' : 'Payment Status',
+                      value: paymentStatus == 'Paid' ? '₹$displayTotal via $paymentMethod' : '₹$displayTotal (Pending - COD)',
                     ),
 
                     const SizedBox(height: 20),

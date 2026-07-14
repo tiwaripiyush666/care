@@ -9,6 +9,8 @@ import 'features/care_booking/data/repositories/provider_repository_impl.dart';
 import 'features/care_booking/presentation/bloc/provider_bloc.dart';
 import 'features/care_booking/data/repositories/booking_repository_impl.dart';
 import 'features/care_booking/presentation/bloc/booking_bloc.dart';
+import 'features/care_booking/data/repositories/chat_repository_impl.dart';
+import 'features/care_booking/presentation/bloc/chat_bloc.dart';
 
 import 'features/splash/presentation/screens/splash_screen.dart';
 import 'features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -47,6 +49,7 @@ class MyApp extends StatelessWidget {
     final authRepository = AuthRepositoryImpl();
     final providerRepository = ProviderRepositoryImpl();
     final bookingRepository = BookingRepositoryImpl();
+    final chatRepository = ChatRepositoryImpl();
 
     return MultiBlocProvider(
       providers: [
@@ -57,7 +60,12 @@ class MyApp extends StatelessWidget {
           create: (context) => ProviderBloc(providerRepository: providerRepository),
         ),
         BlocProvider<BookingBloc>(
-          create: (context) => BookingBloc(bookingRepository: bookingRepository)..add(LoadBookingsEvent()),
+          create: (context) => BookingBloc(bookingRepository: bookingRepository)
+            ..add(LoadBookingsEvent())
+            ..add(SyncOfflineBookingsEvent()),
+        ),
+        BlocProvider<ChatBloc>(
+          create: (context) => ChatBloc(chatRepository: chatRepository),
         ),
       ],
       child: MaterialApp(

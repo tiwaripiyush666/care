@@ -1,4 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:caresphere/features/care_booking/presentation/bloc/chat_bloc.dart';
+import 'package:caresphere/features/care_booking/domain/entities/chat_message.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class TrackBookingScreen extends StatefulWidget {
@@ -10,6 +16,227 @@ class TrackBookingScreen extends StatefulWidget {
 
 class _TrackBookingScreenState extends State<TrackBookingScreen> {
   int _currentNavIndex = 1; // Bookings active
+
+  late final MapController _mapController;
+  Timer? _trackingTimer;
+  int _currentRouteIndex = 0;
+
+  final LatLng _homeLocation = const LatLng(12.9716, 77.5946); // Indiranagar Bangalore Area
+  
+  // A path simulating a provider moving closer to the user's home location
+  final List<LatLng> _simulatedRoute = [
+    const LatLng(12.9780, 77.5850),
+    const LatLng(12.9765, 77.5880),
+    const LatLng(12.9750, 77.5900),
+    const LatLng(12.9735, 77.5925),
+    const LatLng(12.9722, 77.5938),
+    const LatLng(12.9716, 77.5946), // Final Home Arrival coordinates
+  ];
+
+  LatLng? _currentProviderLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _mapController = MapController();
+    _currentProviderLocation = _simulatedRoute.first;
+    _startLiveTracking();
+  }
+
+  @override
+  void dispose() {
+    _trackingTimer?.cancel();
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _startLiveTracking() {
+    _trackingTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_currentRouteIndex < _simulatedRoute.length - 1) {
+            _currentRouteIndex++;
+            _currentProviderLocation = _simulatedRoute[_currentRouteIndex];
+            // Animate map camera center to follow coordinates
+            _mapController.move(_currentProviderLocation!, 15.5);
+          } else {
+            // Arrived -> Stop updates
+            _trackingTimer?.cancel();
+          }
+        });
+      }
+    });
+  }
+
+  void _openChatOverlay(BuildContext context, String providerName) {
+    const String bookingId = 'booking_active_id';
+    
+    // Load history and subscribe
+    context.read<ChatBloc>().add(LoadChatHistory(bookingId));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        final TextEditingController messageController = TextEditingController();
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (BuildContext scrollContext, ScrollController scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(AppTheme.roundedLg),
+                  topRight: Radius.circular(AppTheme.roundedLg),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppTheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Chat with $providerName',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryContainer,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppTheme.outline),
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: AppTheme.outlineVariant),
+                  
+                  Expanded(
+                    child: BlocBuilder<ChatBloc, ChatState>(
+                      builder: (context, state) {
+                        if (state is ChatLoading) {
+                          return const Center(child: CircularProgressIndicator(color: AppTheme.primaryContainer));
+                        } else if (state is ChatHistoryLoaded) {
+                          final messages = state.messages;
+                          return ListView.builder(
+                            controller: scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: messages.length,
+                            itemBuilder: (context, index) {
+                              final message = messages[index];
+                              return Align(
+                                alignment: message.isMe ? Alignment.centerRight : Alignment.centerLeft,
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: message.isMe 
+                                        ? AppTheme.primaryContainer 
+                                        : AppTheme.surfaceContainerHigh,
+                                    borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: message.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        message.text,
+                                        style: TextStyle(
+                                          color: message.isMe ? Colors.white : AppTheme.onSurface,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                                        style: TextStyle(
+                                          color: message.isMe ? Colors.white60 : AppTheme.onSurfaceVariant,
+                                          fontSize: 9,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        } else if (state is ChatError) {
+                          return Center(child: Text(state.message));
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+
+                  SafeArea(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          top: BorderSide(color: AppTheme.outlineVariant),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: messageController,
+                              style: const TextStyle(color: AppTheme.onSurface),
+                              decoration: const InputDecoration(
+                                hintText: 'Type your message...',
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.send, color: AppTheme.primaryContainer),
+                            onPressed: () {
+                              final text = messageController.text.trim();
+                              if (text.isNotEmpty) {
+                                final userMsg = ChatMessage(
+                                  id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+                                  bookingId: bookingId,
+                                  senderId: 'client_me',
+                                  text: text,
+                                  timestamp: DateTime.now(),
+                                  isMe: true,
+                                );
+                                context.read<ChatBloc>().add(SendChatMessage(userMsg));
+                                messageController.clear();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,9 +284,97 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: Image.network(
-                        'https://lh3.googleusercontent.com/aida-public/AB6AXuBVisIf28BhNxW9x6TIc8nUy8iXplCf0yvg6TQFrtiuGJkq6G_8rcf-mOEV3zFqMQBXl4JxH5dFcfQKrAkEs9Uhg39T4UUbM6Blo-r1f59f3nmoSWdSQmQSiQwmARvdgKog8LWHRNqSvnmubnUy8Kvh0HLGt0PguQwLuBZvNbo1yZFnaQAcn_blJW8X95iI0n2UVnmc4l_Nk_f674ykanWTZsXZ_vKePmtyAlHyo_9G6lC_6gS7jlu9XtO3ypQryDvfT_AcV0kHeEij',
-                        fit: BoxFit.cover,
+                      child: FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: _currentProviderLocation ?? _homeLocation,
+                          initialZoom: 15.0,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.caresphere.app',
+                          ),
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: _simulatedRoute,
+                                strokeWidth: 4.0,
+                                color: AppTheme.primaryContainer,
+                                strokeCap: StrokeCap.round,
+                              ),
+                            ],
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              // Destination Marker (Home)
+                              Marker(
+                                point: _homeLocation,
+                                width: 40.0,
+                                height: 40.0,
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 4.0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.home,
+                                    color: Colors.red,
+                                    size: 24,
+                                  ),
+                                ),
+                              ),
+                              // Live Moving Provider Marker
+                              if (_currentProviderLocation != null)
+                                Marker(
+                                  point: _currentProviderLocation!,
+                                  width: 44.0,
+                                  height: 44.0,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      // Soft pulse halo
+                                      Container(
+                                        width: 44,
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryContainer.withAlpha(51),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      // Main indicator circle
+                                      Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: const BoxDecoration(
+                                          color: AppTheme.primaryContainer,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black26,
+                                              blurRadius: 4.0,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.directions_car,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                     // Live Tracking badge overlay
@@ -100,45 +415,6 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                    // Floating center pin
-                    Align(
-                      alignment: Alignment.center,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryContainer.withAlpha(51),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: const BoxDecoration(
-                              color: AppTheme.primaryContainer,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.directions_car,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ],
@@ -278,7 +554,7 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
                           children: [
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: () {},
+                                onPressed: () => _openChatOverlay(context, providerName),
                                 icon: const Icon(Icons.chat_bubble, size: 16, color: Colors.white),
                                 label: const Text('Chat', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                 style: ElevatedButton.styleFrom(

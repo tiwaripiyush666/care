@@ -48,6 +48,8 @@ dependencies:
   geolocator: ^14.0.3
   geocoding: ^4.0.0
   google_maps_flutter: ^2.5.0
+  flutter_map: ^6.0.0
+  latlong2: ^0.9.0
   
   # Caching & DI
   hive_flutter: ^1.1.0

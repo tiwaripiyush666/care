@@ -70,7 +70,48 @@ class BookingRepositoryImpl implements BookingRepository {
       // Serialize to local storage
       final jsonString = jsonEncode(currentBookings);
       await _storageService.cacheValue('bookings_list', jsonString);
-      debugPrint('Booking locally saved: $newBooking');
+      
+      // Append to the offline sync queue
+      final queueJson = _storageService.getCachedValue('offline_bookings_sync_queue');
+      final List<dynamic> queue = queueJson != null ? jsonDecode(queueJson as String) as List : [];
+      queue.add(bookingData);
+      await _storageService.cacheValue('offline_bookings_sync_queue', jsonEncode(queue));
+      
+      debugPrint('Booking locally saved and queued offline: $newBooking');
+    }
+  }
+
+  @override
+  Future<void> syncOfflineBookings() async {
+    if (!_supabaseService.isInitialized) {
+      debugPrint('Offline-Sync: Supabase is uninitialized. Skipping sync.');
+      return;
+    }
+    
+    final queueJson = _storageService.getCachedValue('offline_bookings_sync_queue');
+    if (queueJson == null) return;
+    
+    try {
+      final List<dynamic> queue = jsonDecode(queueJson as String) as List;
+      if (queue.isEmpty) return;
+      
+      debugPrint('Offline-Sync: Syncing ${queue.length} offline-queued bookings to Supabase...');
+      final userId = _supabaseService.client.auth.currentUser?.id;
+      
+      for (final item in queue) {
+        final bookingData = Map<String, dynamic>.from(item);
+        final dataToInsert = {
+          ...bookingData,
+          'user_id': userId,
+          'created_at': DateTime.now().toIso8601String(),
+        };
+        await _supabaseService.client.from('bookings').insert(dataToInsert);
+      }
+      
+      await _storageService.cacheValue('offline_bookings_sync_queue', jsonEncode([]));
+      debugPrint('Offline-Sync: Successfully synchronized all offline bookings.');
+    } catch (e) {
+      debugPrint('Offline-Sync: Error synchronizing offline bookings: $e');
     }
   }
 

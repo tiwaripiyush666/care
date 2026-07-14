@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -17,6 +18,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   final TextEditingController _aptController = TextEditingController();
   final TextEditingController _instructionsController = TextEditingController();
   String _entryMethod = 'I\'ll be home to let them in';
+  String _paymentMethod = 'UPI';
+  String _paymentStatus = 'Pending';
 
   @override
   void dispose() {
@@ -29,6 +32,282 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     setState(() {
       _currentStep = step;
     });
+  }
+
+  void _showCheckoutSheet(BuildContext context, Map<String, dynamic> baseBookingData) {
+    String paymentMethod = 'UPI'; // UPI, Card, COD
+    String paymentStatus = 'select'; // select, processing, success
+    final cardNoController = TextEditingController();
+    final expiryController = TextEditingController();
+    final cvvController = TextEditingController();
+    final upiIdController = TextEditingController(text: 'user@okaxis');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setSheetState) {
+            final double rate = (baseBookingData['rate'] as num?)?.toDouble() ?? 850;
+
+            if (paymentStatus == 'processing') {
+              return Container(
+                height: 380,
+                decoration: const BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(AppTheme.roundedLg),
+                    topRight: Radius.circular(AppTheme.roundedLg),
+                  ),
+                ),
+                child: const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: AppTheme.primaryContainer),
+                      SizedBox(height: 20),
+                      Text(
+                        'Securing payment via gateway...',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            if (paymentStatus == 'success') {
+              return Container(
+                height: 380,
+                decoration: const BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(AppTheme.roundedLg),
+                    topRight: Radius.circular(AppTheme.roundedLg),
+                  ),
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.secondary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check, color: Colors.white, size: 40),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Payment Successful!',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.secondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Txn ID: TXN_CONF_${DateTime.now().millisecondsSinceEpoch}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(AppTheme.roundedLg),
+                    topRight: Radius.circular(AppTheme.roundedLg),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Select Payment Method',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryContainer,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppTheme.outline),
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                        ),
+                      ],
+                    ),
+                    const Divider(color: AppTheme.outlineVariant),
+                    const SizedBox(height: 10),
+                    
+                    RadioListTile<String>(
+                      title: const Text('UPI (GPay / PhonePe / Paytm)', style: TextStyle(color: AppTheme.onSurface)),
+                      value: 'UPI',
+                      groupValue: paymentMethod,
+                      activeColor: AppTheme.primaryContainer,
+                      onChanged: (val) => setSheetState(() => paymentMethod = val!),
+                    ),
+                    if (paymentMethod == 'UPI')
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: TextField(
+                          controller: upiIdController,
+                          style: const TextStyle(color: AppTheme.onSurface),
+                          decoration: const InputDecoration(
+                            labelText: 'Enter UPI ID',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      
+                    RadioListTile<String>(
+                      title: const Text('Credit or Debit Card', style: TextStyle(color: AppTheme.onSurface)),
+                      value: 'Card',
+                      groupValue: paymentMethod,
+                      activeColor: AppTheme.primaryContainer,
+                      onChanged: (val) => setSheetState(() => paymentMethod = val!),
+                    ),
+                    if (paymentMethod == 'Card')
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Column(
+                          children: [
+                            TextField(
+                              controller: cardNoController,
+                              style: const TextStyle(color: AppTheme.onSurface),
+                              decoration: const InputDecoration(
+                                labelText: 'Card Number',
+                                border: OutlineInputBorder(),
+                                hintText: 'XXXX XXXX XXXX XXXX',
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: expiryController,
+                                    style: const TextStyle(color: AppTheme.onSurface),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Expiry (MM/YY)',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.datetime,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextField(
+                                    controller: cvvController,
+                                    style: const TextStyle(color: AppTheme.onSurface),
+                                    decoration: const InputDecoration(
+                                      labelText: 'CVV',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    obscureText: true,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    RadioListTile<String>(
+                      title: const Text('Pay After Service (Cash/COD)', style: TextStyle(color: AppTheme.onSurface)),
+                      value: 'COD',
+                      groupValue: paymentMethod,
+                      activeColor: AppTheme.primaryContainer,
+                      onChanged: (val) => setSheetState(() => paymentMethod = val!),
+                    ),
+
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (paymentMethod == 'Card' && cardNoController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter card number.')),
+                          );
+                          return;
+                        }
+                        if (paymentMethod == 'UPI' && upiIdController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter UPI ID.')),
+                          );
+                          return;
+                        }
+
+                        setSheetState(() => paymentStatus = 'processing');
+                        
+                        Timer(const Duration(milliseconds: 1500), () {
+                          if (sheetContext.mounted) {
+                            setSheetState(() => paymentStatus = 'success');
+                            
+                            Timer(const Duration(seconds: 1), () {
+                              if (sheetContext.mounted) {
+                                Navigator.of(sheetContext).pop();
+                                
+                                final finalBooking = Map<String, dynamic>.from(baseBookingData);
+                                final statusVal = paymentMethod == 'COD' ? 'Pending' : 'Paid';
+                                finalBooking['paymentStatus'] = statusVal;
+                                finalBooking['paymentMethod'] = paymentMethod;
+                                finalBooking['transactionId'] = 'TXN_CONF_${DateTime.now().millisecondsSinceEpoch}';
+
+                                if (mounted) {
+                                  setState(() {
+                                    _paymentMethod = paymentMethod;
+                                    _paymentStatus = statusVal;
+                                  });
+                                  this.context.read<BookingBloc>().add(CreateBookingEvent(finalBooking));
+                                }
+                              }
+                            });
+                          }
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryContainer,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                        ),
+                      ),
+                      child: Text('Pay ₹${rate.toInt()} & Confirm Booking'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        );
+      }
+    );
   }
 
   @override
@@ -57,6 +336,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
             'selectedSlot': _selectedSlot,
             'address': 'Sector 62, Noida, UP',
             'entryMethod': _entryMethod,
+            'paymentMethod': _paymentMethod,
+            'paymentStatus': _paymentStatus,
           });
         } else if (state is BookingError) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -814,7 +1095,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                     'rate': rate,
                     'entryMethod': _entryMethod,
                   };
-                  context.read<BookingBloc>().add(CreateBookingEvent(bookingData));
+                  _showCheckoutSheet(context, bookingData);
                 },
                 icon: isLoading
                     ? const SizedBox(

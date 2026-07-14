@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/repositories/booking_repository.dart';
 
@@ -10,6 +11,8 @@ class CreateBookingEvent extends BookingEvent {
 }
 
 class LoadBookingsEvent extends BookingEvent {}
+
+class SyncOfflineBookingsEvent extends BookingEvent {}
 
 // --- States ---
 abstract class BookingState {}
@@ -37,6 +40,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   BookingBloc({required this.bookingRepository}) : super(BookingInitial()) {
     on<CreateBookingEvent>(_onCreateBooking);
     on<LoadBookingsEvent>(_onLoadBookings);
+    on<SyncOfflineBookingsEvent>(_onSyncOfflineBookings);
   }
 
   Future<void> _onCreateBooking(CreateBookingEvent event, Emitter<BookingState> emit) async {
@@ -56,6 +60,14 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       emit(BookingsLoaded(bookings));
     } catch (e) {
       emit(BookingError(e.toString()));
+    }
+  }
+
+  Future<void> _onSyncOfflineBookings(SyncOfflineBookingsEvent event, Emitter<BookingState> emit) async {
+    try {
+      await bookingRepository.syncOfflineBookings();
+    } catch (e) {
+      debugPrint('SyncOfflineBookingsEvent error: $e');
     }
   }
 }
