@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'package:caresphere/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:caresphere/core/storage/local_storage.dart';
 
 class HomeHubScreen extends StatefulWidget {
   const HomeHubScreen({super.key});
@@ -11,13 +12,25 @@ class HomeHubScreen extends StatefulWidget {
 
 class _HomeHubScreenState extends State<HomeHubScreen> {
   int _currentNavIndex = 0;
+  String _userAddress = 'Indiranagar, Bangalore';
 
   @override
   void initState() {
     super.initState();
+    _loadUserAddress();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkBiometricOptIn();
     });
+  }
+
+  void _loadUserAddress() {
+    final storage = LocalStorageService();
+    final cached = storage.getCachedValue('precise_user_address');
+    if (cached != null && cached.toString().trim().isNotEmpty) {
+      setState(() {
+        _userAddress = cached.toString().trim();
+      });
+    }
   }
 
   Future<void> _checkBiometricOptIn() async {
@@ -136,26 +149,30 @@ class _HomeHubScreenState extends State<HomeHubScreen> {
               size: 20,
             ),
             const SizedBox(width: 6),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'YOUR LOCATION',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    color: AppTheme.onSurfaceVariant,
-                    fontWeight: FontWeight.bold,
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'YOUR LOCATION',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                      color: AppTheme.onSurfaceVariant,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                Text(
-                  'Indiranagar, Bangalore',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: AppTheme.primaryContainer,
-                    fontWeight: FontWeight.bold,
+                  Text(
+                    _userAddress,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: AppTheme.primaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

@@ -130,6 +130,27 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                   child: Image.network(
                     'https://lh3.googleusercontent.com/aida/AP1WRLvKJSZBIuYDHp-F_1EdH1FWcTPcg3fpCvhZaMIGcGrKaEi8MGbRdfRGQTTGjqWeEWB51b5IAcbH2cbkND6H9bHP5ozMG1ZcK9LQu8hz_yxWM_J87Q3X1wGiV7hXm0gSowL3nWd_CfivYcpSaVnVxY_TR_OyXgYvogJ91gqU9J5Wj7O1BCgbuS83B-MKqmU4Xrx4L9o8H5rEqYeEgOOGMSDo4R84Qg02YT7gPT2NL8wSoEW-4jEs8NF5oQg',
                     fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              AppTheme.primaryContainer,
+                              AppTheme.secondaryFixed,
+                            ],
+                          ),
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.home_repair_service,
+                            color: Colors.white30,
+                            size: 80,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 // Top skip action

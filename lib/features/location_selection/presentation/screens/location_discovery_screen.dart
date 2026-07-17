@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import 'package:caresphere/core/location/location_service.dart';
+import 'package:caresphere/core/storage/local_storage.dart';
 
 class LocationDiscoveryScreen extends StatefulWidget {
   const LocationDiscoveryScreen({super.key});
@@ -12,29 +14,52 @@ class LocationDiscoveryScreen extends StatefulWidget {
 class _LocationDiscoveryScreenState extends State<LocationDiscoveryScreen> {
   bool _isLocating = false;
 
-  void _useCurrentLocation() {
+  Future<void> _useCurrentLocation() async {
     if (_isLocating) return;
 
     setState(() {
       _isLocating = true;
     });
 
-    // Simulate location fetching (2 seconds delay)
-    Timer(const Duration(seconds: 2), () {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    try {
+      final position = await LocationService().getCurrentUserPosition();
+      final address = await LocationService().getAddressFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      // Save to cache storage
+      final storage = LocalStorageService();
+      await storage.cacheValue('precise_user_address', address);
+
       if (mounted) {
         setState(() {
           _isLocating = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Precise location retrieved automatically!'),
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Located: $address'),
             backgroundColor: AppTheme.secondary,
           ),
         );
-        // Successfully located, navigate to Home Hub
-        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+        navigator.pushNamedAndRemoveUntil('/home', (route) => false);
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLocating = false;
+        });
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Location Error: ${e.toString()}'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
   }
 
   @override
