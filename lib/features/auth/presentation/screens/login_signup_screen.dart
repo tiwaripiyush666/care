@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -21,6 +22,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
 
   String? _deviceId;
   String? _deviceTrustToken;
+  bool _isBiometricConfigured = false;
 
   @override
   void initState() {
@@ -37,13 +39,118 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
       await storage.write('device_id', devId);
     }
     final token = await storage.read('device_trust_token');
+    final biometricEnabled = await storage.read('biometric_enabled_flag');
     
     if (mounted) {
       setState(() {
         _deviceId = devId;
         _deviceTrustToken = token;
+        _isBiometricConfigured = biometricEnabled == 'true';
       });
+
+      if (_isBiometricConfigured) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _triggerBiometricVerification();
+        });
+      }
     }
+  }
+
+  void _triggerBiometricVerification() {
+    bool timerStarted = false;
+    bool verifying = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            if (!timerStarted) {
+              timerStarted = true;
+              Timer(const Duration(milliseconds: 1500), () {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    verifying = false;
+                  });
+                  
+                  Timer(const Duration(milliseconds: 800), () {
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop();
+                      Navigator.pushNamedAndRemoveUntil(this.context, '/home', (route) => false);
+                    }
+                  });
+                }
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: AppTheme.background,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.roundedLg),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 20),
+                  if (verifying)
+                    const SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: CircularProgressIndicator(
+                        color: AppTheme.primaryContainer,
+                        strokeWidth: 3,
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.secondary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.check, color: Colors.white, size: 40),
+                    ),
+                  const SizedBox(height: 24),
+                  Text(
+                    verifying ? 'Verifying Identity...' : 'Identity Verified!',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    verifying 
+                        ? 'Confirming device biometrics / lock credentials...' 
+                        : 'Welcome back to Caresphere',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (verifying)
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text(
+                        'Cancel & Use OTP',
+                        style: TextStyle(
+                          color: AppTheme.outline,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
   }
 
   @override
@@ -334,48 +441,70 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Get OTP CTA Button
-                      ElevatedButton(
-                        onPressed: _isPhoneValid && !_isLoading ? _triggerOtpSend : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryContainer,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: AppTheme.primaryContainer.withAlpha(76),
-                          disabledForegroundColor: Colors.white.withAlpha(128),
-                          minimumSize: const Size.fromHeight(60),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTheme.roundedLg),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: _isLoading
-                            ? Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white.withAlpha(204),
+                      // Get OTP CTA Button & Biometrics Shortcut Row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: _isPhoneValid && !_isLoading ? _triggerOtpSend : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryContainer,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: AppTheme.primaryContainer.withAlpha(76),
+                                disabledForegroundColor: Colors.white.withAlpha(128),
+                                minimumSize: const Size.fromHeight(60),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppTheme.roundedLg),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: _isLoading
+                                  ? Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                              Colors.white.withAlpha(204),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Text(
+                                          'Sending...',
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    )
+                                  : const Text(
+                                      'Get OTP',
+                                      style: TextStyle(
+                                        fontSize: 16.0,
+                                        fontWeight: FontWeight.w800,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  const Text(
-                                    'Sending...',
-                                    style: TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              )
-                            : const Text(
-                                'Get OTP',
-                                style: TextStyle(
-                                  fontSize: 16.0,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            ),
+                          ),
+                          if (_isBiometricConfigured) ...[
+                            const SizedBox(width: 12),
+                            Container(
+                              height: 60,
+                              width: 60,
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(AppTheme.roundedLg),
+                                border: Border.all(color: AppTheme.outlineVariant),
                               ),
+                              child: IconButton(
+                                icon: const Icon(Icons.fingerprint, color: AppTheme.primaryContainer, size: 28),
+                                onPressed: _triggerBiometricVerification,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 16),
 
