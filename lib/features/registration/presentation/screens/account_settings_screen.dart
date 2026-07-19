@@ -442,6 +442,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 icon: Icons.location_on,
                 title: 'Saved Addresses',
                 subtitle: 'Manage your service locations',
+                onTap: () => Navigator.pushNamed(context, '/saved_addresses'),
               ),
               const SizedBox(height: 8),
               _buildSettingsRow(
