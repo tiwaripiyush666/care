@@ -14,7 +14,150 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   int _currentNavIndex = 2; // Bookings tab is active
   String _activeTab = 'Active'; // Active, Past, Cancelled
 
+  bool _isSearching = false;
+  String _searchQuery = '';
+  String _filterService = 'All';
+  String _sortBy = 'Newest';
+  final TextEditingController _searchController = TextEditingController();
 
+  int _parseBookingDate(String dateStr) {
+    try {
+      final months = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+      };
+      final clean = dateStr.toLowerCase().replaceAll(',', '');
+      final parts = clean.split(' ');
+      if (parts.length >= 3) {
+        final monthStr = parts[0].substring(0, 3);
+        final month = months[monthStr] ?? 1;
+        final day = int.tryParse(parts[1]) ?? 1;
+        final year = int.tryParse(parts[2]) ?? 2026;
+        return DateTime(year, month, day).millisecondsSinceEpoch;
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setSheetState) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.roundedLg)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Filter Bookings',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryContainer),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setSheetState(() {
+                            _filterService = 'All';
+                            _sortBy = 'Newest';
+                          });
+                        },
+                        child: const Text('Reset All', style: TextStyle(color: AppTheme.error)),
+                      ),
+                    ],
+                  ),
+                  const Divider(color: AppTheme.outlineVariant),
+                  const SizedBox(height: 12),
+                  const Text('SERVICE TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.onSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      'All',
+                      'Elderly Care',
+                      'Nursing Care',
+                      'Baby Care',
+                      'Physiotherapy',
+                    ].map((svc) {
+                      final selected = _filterService == svc;
+                      return ChoiceChip(
+                        label: Text(svc, style: TextStyle(color: selected ? Colors.white : AppTheme.onSurface, fontWeight: FontWeight.bold, fontSize: 12)),
+                        selected: selected,
+                        selectedColor: AppTheme.primaryContainer,
+                        backgroundColor: Colors.white,
+                        onSelected: (val) {
+                          setSheetState(() {
+                            _filterService = svc;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('SORT BY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.onSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('Newest First', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          selected: _sortBy == 'Newest',
+                          selectedColor: AppTheme.primaryContainer,
+                          backgroundColor: Colors.white,
+                          onSelected: (val) {
+                            setSheetState(() {
+                              _sortBy = 'Newest';
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('Oldest First', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          selected: _sortBy == 'Oldest',
+                          selectedColor: AppTheme.primaryContainer,
+                          backgroundColor: Colors.white,
+                          onSelected: (val) {
+                            setSheetState(() {
+                              _sortBy = 'Oldest';
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {});
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryContainer,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.roundedMd)),
+                    ),
+                    child: const Text('Apply Filters', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -50,8 +193,16 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
         ),
         actions: [
           IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.search, color: AppTheme.primaryContainer),
+            onPressed: () {
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchQuery = '';
+                  _searchController.clear();
+                }
+              });
+            },
+            icon: Icon(_isSearching ? Icons.close : Icons.search, color: AppTheme.primaryContainer),
           ),
           Padding(
             padding: const EdgeInsets.only(right: AppTheme.containerMargin),
@@ -106,6 +257,65 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                 ],
               ),
             ),
+
+            if (_isSearching) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppTheme.containerMargin, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val;
+                          });
+                        },
+                        style: const TextStyle(color: AppTheme.onSurface, fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'Search by provider or specialty...',
+                          hintStyle: const TextStyle(color: AppTheme.outline),
+                          prefixIcon: const Icon(Icons.search, color: AppTheme.outline),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                            borderSide: const BorderSide(color: AppTheme.outlineVariant),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                            borderSide: const BorderSide(color: AppTheme.outlineVariant),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                            borderSide: const BorderSide(color: AppTheme.primaryContainer),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _showFilterSheet,
+                      icon: Icon(
+                        Icons.filter_list,
+                        color: _filterService != 'All' || _sortBy != 'Newest'
+                            ? AppTheme.secondary
+                            : AppTheme.primaryContainer,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                          side: const BorderSide(color: AppTheme.outlineVariant),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
 
             // Tab bar selection switcher
             Padding(
@@ -279,24 +489,63 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   }
 
   Widget _buildBookingsList(ThemeData theme, List<Map<String, dynamic>> allBookings) {
-    final activeBookings = allBookings.where((b) {
+    final filteredBookings = allBookings.where((b) {
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final name = b['name']?.toString().toLowerCase() ?? '';
+        final specialty = b['specialty']?.toString().toLowerCase() ?? '';
+        final date = b['date']?.toString().toLowerCase() ?? '';
+        if (!name.contains(query) && !specialty.contains(query) && !date.contains(query)) {
+          return false;
+        }
+      }
+
+      if (_filterService != 'All') {
+        final f = _filterService.toLowerCase();
+        final specialty = b['specialty']?.toString().toLowerCase() ?? '';
+        if (f == 'elderly care') {
+          if (!specialty.contains('senior') && !specialty.contains('elderly')) return false;
+        } else if (f == 'nursing care') {
+          if (!specialty.contains('nurse')) return false;
+        } else if (f == 'baby care') {
+          if (!specialty.contains('pediatric') && !specialty.contains('baby')) return false;
+        } else if (f == 'physiotherapy') {
+          if (!specialty.contains('physiotherapist') && !specialty.contains('physio')) return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    final activeBookings = filteredBookings.where((b) {
       final status = b['status']?.toString().toLowerCase() ?? 'active';
       return status == 'active';
     }).toList();
     
-    final pastBookings = allBookings.where((b) {
+    final pastBookings = filteredBookings.where((b) {
       final status = b['status']?.toString().toLowerCase() ?? '';
       return status == 'past' || status == 'completed';
     }).toList();
     
-    final cancelledBookings = allBookings.where((b) {
+    final cancelledBookings = filteredBookings.where((b) {
       final status = b['status']?.toString().toLowerCase() ?? '';
       return status == 'cancelled';
     }).toList();
 
+    int sortComparator(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final dateA = _parseBookingDate(a['date']?.toString() ?? '');
+      final dateB = _parseBookingDate(b['date']?.toString() ?? '');
+      return _sortBy == 'Newest' ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
+    }
+
+    activeBookings.sort(sortComparator);
+    pastBookings.sort(sortComparator);
+    cancelledBookings.sort(sortComparator);
+
     if (_activeTab == 'Active') {
       if (activeBookings.isEmpty) {
-        return _buildEmptyState('No active scheduled bookings found.');
+        return _buildEmptyState(_searchQuery.isNotEmpty 
+            ? 'No active bookings match your search query.'
+            : 'No active scheduled bookings found.');
       }
       return ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: AppTheme.containerMargin),
@@ -308,7 +557,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       );
     } else if (_activeTab == 'Past') {
       if (pastBookings.isEmpty) {
-        return _buildEmptyState('No completed service records found.');
+        return _buildEmptyState(_searchQuery.isNotEmpty 
+            ? 'No past records match your search query.'
+            : 'No completed service records found.');
       }
       return ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: AppTheme.containerMargin),
@@ -320,7 +571,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       );
     } else {
       if (cancelledBookings.isEmpty) {
-        return _buildEmptyState('No cancelled bookings.');
+        return _buildEmptyState(_searchQuery.isNotEmpty 
+            ? 'No cancelled bookings match your search query.'
+            : 'No cancelled bookings.');
       }
       return ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: AppTheme.containerMargin),
