@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../bloc/booking_bloc.dart';
 
+import '../../../auth/data/repositories/auth_repository_impl.dart';
+
 class BookingFlowScreen extends StatefulWidget {
   const BookingFlowScreen({super.key});
 
@@ -20,6 +22,26 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   String _entryMethod = 'I\'ll be home to let them in';
   String _paymentMethod = 'UPI';
   String _paymentStatus = 'Pending';
+  String? _promoCode;
+  int _discountValue = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPromoData();
+  }
+
+  Future<void> _loadPromoData() async {
+    final storage = SecureStorageService();
+    final code = await storage.read('applied_promo_code');
+    final val = await storage.read('promo_discount_value');
+    if (mounted && code != null && val != null) {
+      setState(() {
+        _promoCode = code;
+        _discountValue = int.tryParse(val) ?? 0;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -298,7 +320,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                           borderRadius: BorderRadius.circular(AppTheme.roundedMd),
                         ),
                       ),
-                      child: Text('Pay ₹${rate.toInt()} & Confirm Booking'),
+                      child: Text('Pay ₹${(rate - _discountValue).toInt()} & Confirm Booking'),
                     ),
                   ],
                 ),
@@ -331,7 +353,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           
           Navigator.pushNamed(context, '/booking_confirmation', arguments: {
             'providerName': providerName,
-            'totalEstimate': providerRate,
+            'totalEstimate': providerRate - _discountValue,
             'selectedDay': _selectedDayIndex + 14,
             'selectedSlot': _selectedSlot,
             'address': 'Sector 62, Noida, UP',
@@ -1019,7 +1041,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     final rate = provider['rate'] ?? 850;
     final avatarUrl = provider['avatarUrl'] ?? '';
     final specialty = provider['specialty'] ?? '';
-    final displayTotal = rate;
+    final displayTotal = rate - _discountValue;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1041,9 +1063,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Text(
+                  const Text(
                     'Total Estimate',
                     style: TextStyle(
                       color: Color(0xCCB4EBFF),
@@ -1051,21 +1073,48 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(width: 4),
-                  Icon(Icons.help_outline, color: Color(0x99B4EBFF), size: 13),
+                  const SizedBox(width: 4),
+                  if (_discountValue > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondary,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$_promoCode APPLIED',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    )
+                  else
+                    const Icon(Icons.help_outline, color: Color(0x99B4EBFF), size: 13),
                 ],
               ),
               const SizedBox(height: 2),
               Text.rich(
                 TextSpan(
-                  text: '₹$displayTotal',
+                  text: _discountValue > 0 ? '₹$rate ' : '',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22.0,
+                    color: Color(0x66B4EBFF),
+                    fontSize: 16.0,
                     fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.lineThrough,
                   ),
-                  children: const [
+                  children: [
                     TextSpan(
+                      text: '₹$displayTotal',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22.0,
+                        fontWeight: FontWeight.bold,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                    const TextSpan(
                       text: ' / visit',
                       style: TextStyle(
                         fontSize: 12,
@@ -1092,7 +1141,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                     'address': 'Sector 62, Noida (Home)',
                     'isAvailableNow': true,
                     'hasTracking': true,
-                    'rate': rate,
+                    'rate': rate - _discountValue,
                     'entryMethod': _entryMethod,
                   };
                   _showCheckoutSheet(context, bookingData);

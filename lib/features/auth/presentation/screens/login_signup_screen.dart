@@ -14,6 +14,7 @@ class LoginSignupScreen extends StatefulWidget {
 
 class _LoginSignupScreenState extends State<LoginSignupScreen> {
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _referralController = TextEditingController();
   bool _isPhoneValid = false;
   bool _isLoading = false;
   bool _haveReferral = false;
@@ -23,6 +24,9 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   String? _deviceId;
   String? _deviceTrustToken;
   bool _isBiometricConfigured = false;
+
+  String? _promoErrorMessage;
+  String? _promoSuccessMessage;
 
   @override
   void initState() {
@@ -156,12 +160,51 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   @override
   void dispose() {
     _phoneController.dispose();
+    _referralController.dispose();
     super.dispose();
   }
 
   void _validatePhone() {
     setState(() {
       _isPhoneValid = _phoneController.text.trim().length == 10;
+    });
+  }
+
+  Future<void> _applyPromoCode() async {
+    final code = _referralController.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+
+    final storage = SecureStorageService();
+    if (code == 'WELCOME100') {
+      await storage.write('applied_promo_code', 'WELCOME100');
+      await storage.write('promo_discount_value', '100');
+      setState(() {
+        _promoSuccessMessage = '✓ Promo Applied! ₹100 discount added to your next booking.';
+        _promoErrorMessage = null;
+      });
+    } else if (code == 'SNABBIT250') {
+      await storage.write('applied_promo_code', 'SNABBIT250');
+      await storage.write('promo_discount_value', '250');
+      setState(() {
+        _promoSuccessMessage = '✓ Promo Applied! ₹250 discount added to your next booking.';
+        _promoErrorMessage = null;
+      });
+    } else {
+      setState(() {
+        _promoErrorMessage = '✗ Invalid promo code. Try WELCOME100 or SNABBIT250';
+        _promoSuccessMessage = null;
+      });
+    }
+  }
+
+  Future<void> _clearPromoCode() async {
+    final storage = SecureStorageService();
+    await storage.delete('applied_promo_code');
+    await storage.delete('promo_discount_value');
+    setState(() {
+      _promoSuccessMessage = null;
+      _promoErrorMessage = null;
+      _referralController.clear();
     });
   }
 
@@ -523,6 +566,9 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                                 setState(() {
                                   _haveReferral = val;
                                 });
+                                if (!val) {
+                                  _clearPromoCode();
+                                }
                               }
                             },
                           ),
@@ -536,6 +582,79 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                           ),
                         ],
                       ),
+                      if (_haveReferral) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surfaceContainerLowest,
+                                  borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                                  border: Border.all(color: AppTheme.outlineVariant),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: TextField(
+                                  controller: _referralController,
+                                  textCapitalization: TextCapitalization.characters,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Enter code e.g. WELCOME100',
+                                    border: InputBorder.none,
+                                    hintStyle: TextStyle(
+                                      color: Color(0x6670787C),
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  style: const TextStyle(fontSize: 13, color: AppTheme.onSurface),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: _applyPromoCode,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryContainer,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: const Text(
+                                  'Apply',
+                                  style: TextStyle(
+                                    fontSize: 13.0,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_promoErrorMessage != null) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _promoErrorMessage!,
+                              style: const TextStyle(color: AppTheme.error, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                        if (_promoSuccessMessage != null) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _promoSuccessMessage!,
+                              style: const TextStyle(color: AppTheme.secondary, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                 ),
