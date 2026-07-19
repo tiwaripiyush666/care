@@ -449,6 +449,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 icon: Icons.payment,
                 title: 'Payment Methods',
                 subtitle: 'Secure checkout and billing',
+                onTap: () => Navigator.pushNamed(context, '/payment_methods'),
               ),
               const SizedBox(height: 8),
               _buildSettingsRow(
@@ -474,6 +475,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 icon: Icons.help,
                 title: 'Help Center',
                 subtitle: 'FAQs and direct support line',
+                onTap: () => Navigator.pushNamed(context, '/help_center'),
               ),
               const SizedBox(height: 8),
               _buildSettingsRow(

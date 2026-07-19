@@ -30,6 +30,8 @@ import 'features/care_booking/presentation/screens/track_booking_screen.dart';
 import 'features/care_booking/presentation/screens/my_bookings_screen.dart';
 import 'features/registration/presentation/screens/account_settings_screen.dart';
 import 'features/registration/presentation/screens/refer_and_earn_screen.dart';
+import 'features/registration/presentation/screens/help_center_screen.dart';
+import 'features/registration/presentation/screens/payment_methods_screen.dart';
 import 'features/location_selection/presentation/screens/saved_addresses_screen.dart';
 
 void main() async {
@@ -95,6 +97,8 @@ class MyApp extends StatelessWidget {
           '/profile': (context) => const AccountSettingsScreen(),
           '/referral': (context) => const ReferAndEarnScreen(),
           '/saved_addresses': (context) => const SavedAddressesScreen(),
+          '/help_center': (context) => const HelpCenterScreen(),
+          '/payment_methods': (context) => const PaymentMethodsScreen(),
         },
       ),
     );

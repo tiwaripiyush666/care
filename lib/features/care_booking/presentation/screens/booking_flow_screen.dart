@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../bloc/booking_bloc.dart';
 
@@ -29,6 +30,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   void initState() {
     super.initState();
     _loadPromoData();
+    Hive.openBox('caresphere_payment_methods');
   }
 
   Future<void> _loadPromoData() async {
@@ -62,7 +64,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     final cardNoController = TextEditingController();
     final expiryController = TextEditingController();
     final cvvController = TextEditingController();
-    final upiIdController = TextEditingController(text: 'user@okaxis');
+    final upiIdController = TextEditingController();
+    String selectedUpiKey = 'new';
+    String selectedCardKey = 'new';
 
     showModalBottomSheet(
       context: context,
@@ -72,6 +76,14 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setSheetState) {
             final double rate = (baseBookingData['rate'] as num?)?.toDouble() ?? 850;
+            final Box paymentBox = Hive.box('caresphere_payment_methods');
+            final Map<dynamic, dynamic> savedMethods = paymentBox.toMap();
+            final List<MapEntry<dynamic, dynamic>> savedCards = savedMethods.entries
+                .where((e) => (e.value as Map)['type'] == 'CARD')
+                .toList();
+            final List<MapEntry<dynamic, dynamic>> savedUpis = savedMethods.entries
+                .where((e) => (e.value as Map)['type'] == 'UPI')
+                .toList();
 
             if (paymentStatus == 'processing') {
               return Container(
@@ -192,18 +204,56 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       activeColor: AppTheme.primaryContainer,
                       onChanged: (val) => setSheetState(() => paymentMethod = val!),
                     ),
-                    if (paymentMethod == 'UPI')
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: TextField(
-                          controller: upiIdController,
-                          style: const TextStyle(color: AppTheme.onSurface),
-                          decoration: const InputDecoration(
-                            labelText: 'Enter UPI ID',
-                            border: OutlineInputBorder(),
+                    if (paymentMethod == 'UPI') ...[
+                      if (savedUpis.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 4.0),
+                          child: DropdownButtonFormField<String>(
+                            value: selectedUpiKey,
+                            dropdownColor: Colors.white,
+                            decoration: const InputDecoration(
+                              labelText: 'Select Saved UPI ID',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              ...savedUpis.map((e) => DropdownMenuItem<String>(
+                                    value: e.key as String,
+                                    child: Text(
+                                      (e.value as Map)['vpa'] ?? '',
+                                      style: const TextStyle(color: AppTheme.onSurface),
+                                    ),
+                                  )),
+                              const DropdownMenuItem<String>(
+                                value: 'new',
+                                child: Text('Enter New UPI ID', style: TextStyle(color: AppTheme.secondary, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              setSheetState(() {
+                                selectedUpiKey = val!;
+                                if (val != 'new') {
+                                  upiIdController.text = (savedMethods[val] as Map)['vpa'] ?? '';
+                                } else {
+                                  upiIdController.clear();
+                                }
+                              });
+                            },
                           ),
                         ),
-                      ),
+                      if (selectedUpiKey == 'new')
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 4.0),
+                          child: TextField(
+                            controller: upiIdController,
+                            style: const TextStyle(color: AppTheme.onSurface),
+                            decoration: const InputDecoration(
+                              labelText: 'Enter UPI ID',
+                              hintText: 'username@bank',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                    ],
                       
                     RadioListTile<String>(
                       title: const Text('Credit or Debit Card', style: TextStyle(color: AppTheme.onSurface)),
@@ -212,53 +262,85 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       activeColor: AppTheme.primaryContainer,
                       onChanged: (val) => setSheetState(() => paymentMethod = val!),
                     ),
-                    if (paymentMethod == 'Card')
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: Column(
-                          children: [
-                            TextField(
-                              controller: cardNoController,
-                              style: const TextStyle(color: AppTheme.onSurface),
-                              decoration: const InputDecoration(
-                                labelText: 'Card Number',
-                                border: OutlineInputBorder(),
-                                hintText: 'XXXX XXXX XXXX XXXX',
+                    if (paymentMethod == 'Card') ...[
+                      if (savedCards.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 4.0),
+                          child: DropdownButtonFormField<String>(
+                            value: selectedCardKey,
+                            dropdownColor: Colors.white,
+                            decoration: const InputDecoration(
+                              labelText: 'Select Saved Card',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              ...savedCards.map((e) => DropdownMenuItem<String>(
+                                    value: e.key as String,
+                                    child: Text(
+                                      (e.value as Map)['maskedNumber'] ?? '',
+                                      style: const TextStyle(color: AppTheme.onSurface),
+                                    ),
+                                  )),
+                              const DropdownMenuItem<String>(
+                                value: 'new',
+                                child: Text('Enter New Card Details', style: TextStyle(color: AppTheme.secondary, fontWeight: FontWeight.bold)),
                               ),
-                              keyboardType: TextInputType.number,
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: expiryController,
-                                    style: const TextStyle(color: AppTheme.onSurface),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Expiry (MM/YY)',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    keyboardType: TextInputType.datetime,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: TextField(
-                                    controller: cvvController,
-                                    style: const TextStyle(color: AppTheme.onSurface),
-                                    decoration: const InputDecoration(
-                                      labelText: 'CVV',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    obscureText: true,
-                                    keyboardType: TextInputType.number,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                            ],
+                            onChanged: (val) {
+                              setSheetState(() {
+                                selectedCardKey = val!;
+                              });
+                            },
+                          ),
                         ),
-                      ),
+                      if (selectedCardKey == 'new')
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 4.0),
+                          child: Column(
+                            children: [
+                              TextField(
+                                controller: cardNoController,
+                                style: const TextStyle(color: AppTheme.onSurface),
+                                decoration: const InputDecoration(
+                                  labelText: 'Card Number',
+                                  hintText: 'XXXX XXXX XXXX XXXX',
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.number,
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: expiryController,
+                                      style: const TextStyle(color: AppTheme.onSurface),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Expiry (MM/YY)',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      keyboardType: TextInputType.datetime,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: cvvController,
+                                      style: const TextStyle(color: AppTheme.onSurface),
+                                      decoration: const InputDecoration(
+                                        labelText: 'CVV',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      obscureText: true,
+                                      keyboardType: TextInputType.number,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
 
                     RadioListTile<String>(
                       title: const Text('Pay After Service (Cash/COD)', style: TextStyle(color: AppTheme.onSurface)),
@@ -271,17 +353,53 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: () {
-                        if (paymentMethod == 'Card' && cardNoController.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter card number.')),
-                          );
-                          return;
-                        }
-                        if (paymentMethod == 'UPI' && upiIdController.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter UPI ID.')),
-                          );
-                          return;
+                        if (paymentMethod == 'UPI') {
+                          if (selectedUpiKey == 'new') {
+                            final upiText = upiIdController.text.trim();
+                            if (upiText.isEmpty || !upiText.contains('@')) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please enter a valid UPI ID (e.g. user@bank).')),
+                              );
+                              return;
+                            }
+                            final itemKey = 'upi_${DateTime.now().millisecondsSinceEpoch}';
+                            paymentBox.put(itemKey, {
+                              'type': 'UPI',
+                              'vpa': upiText,
+                            });
+                          }
+                        } else if (paymentMethod == 'Card') {
+                          if (selectedCardKey == 'new') {
+                            final cardNum = cardNoController.text.trim().replaceAll(' ', '');
+                            final expiry = expiryController.text.trim();
+                            final cvv = cvvController.text.trim();
+                            if (cardNum.length != 16) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Card number must be 16 digits.')),
+                              );
+                              return;
+                            }
+                            if (expiry.length != 5 || !expiry.contains('/')) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Expiry must be MM/YY.')),
+                              );
+                              return;
+                            }
+                            if (cvv.length != 3) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('CVV must be 3 digits.')),
+                              );
+                              return;
+                            }
+                            final masked = '•••• •••• •••• ${cardNum.substring(12)}';
+                            final itemKey = 'card_${DateTime.now().millisecondsSinceEpoch}';
+                            paymentBox.put(itemKey, {
+                              'type': 'CARD',
+                              'maskedNumber': masked,
+                              'expiry': expiry,
+                              'holder': 'Cardholder',
+                            });
+                          }
                         }
 
                         setSheetState(() => paymentStatus = 'processing');
