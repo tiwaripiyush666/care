@@ -68,6 +68,13 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
     });
   }
 
+  void _recenterCamera() {
+    if (_currentProviderLocation == null) return;
+    final double centerLat = (_homeLocation.latitude + _currentProviderLocation!.latitude) / 2;
+    final double centerLng = (_homeLocation.longitude + _currentProviderLocation!.longitude) / 2;
+    _mapController.move(LatLng(centerLat, centerLng), 14.2);
+  }
+
   void _openChatOverlay(BuildContext context, String providerName) {
     const String bookingId = 'booking_active_id';
     
@@ -246,6 +253,19 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
     final String providerName = routeArgs?['providerName'] ?? 'Dr. Arjun Mehta';
     final String selectedSlot = routeArgs?['selectedSlot'] ?? 'Afternoon';
 
+    final int remainingMins = (10 - (_currentRouteIndex * 2)).clamp(0, 10);
+    final String etaString = remainingMins == 0 ? 'Arrived' : '$remainingMins mins';
+
+    final isMorning = selectedSlot == 'Morning';
+    final int baseHour = isMorning ? 8 : 1;
+    final int baseMinute = isMorning ? 0 : 0;
+    
+    final int displayMinute = baseMinute + remainingMins;
+    final String minuteString = displayMinute < 10 ? '0$displayMinute' : '$displayMinute';
+    final String arrivalTimeString = isMorning 
+        ? '0$baseHour:$minuteString AM' 
+        : '0$baseHour:$minuteString PM';
+
     return Scaffold(
       backgroundColor: AppTheme.background, // aligned background
       appBar: AppBar(
@@ -417,6 +437,19 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
                         ),
                       ),
                     ),
+                    // Recenter Camera button overlay
+                    Positioned(
+                      bottom: 16,
+                      right: 16,
+                      child: FloatingActionButton.small(
+                        heroTag: 'recenter_map_fab',
+                        onPressed: _recenterCamera,
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppTheme.primaryContainer,
+                        elevation: 4,
+                        child: const Icon(Icons.my_location, size: 20),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -458,8 +491,8 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  selectedSlot == 'Morning' ? '08:15 AM' : '01:10 PM',
+                                 Text(
+                                  arrivalTimeString,
                                   style: theme.textTheme.headlineLarge?.copyWith(
                                     color: AppTheme.primaryContainer,
                                     fontSize: 24,
@@ -474,13 +507,13 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
                                 color: AppTheme.primaryContainer.withAlpha(26),
                                 borderRadius: BorderRadius.circular(AppTheme.roundedFull),
                               ),
-                              child: const Row(
+                              child: Row(
                                 children: [
-                                  Icon(Icons.schedule, color: AppTheme.primaryContainer, size: 16),
-                                  SizedBox(width: 4),
+                                  const Icon(Icons.schedule, color: AppTheme.primaryContainer, size: 16),
+                                  const SizedBox(width: 4),
                                   Text(
-                                    '10 mins',
-                                    style: TextStyle(
+                                    etaString,
+                                    style: const TextStyle(
                                       color: AppTheme.primaryContainer,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
