@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import '../../../../core/location/location_service.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class LocationSelectionScreen extends StatefulWidget {
@@ -68,6 +70,62 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
       }
     },
   ];
+
+  bool _initialized = false;
+  bool _isDetecting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null && args['initialDetails'] != null) {
+        final details = args['initialDetails'] as Map<dynamic, dynamic>;
+        _houseController.text = details['house'] ?? '';
+        _areaController.text = details['area'] ?? '';
+        _floorController.text = details['floor'] ?? '';
+        _landmarkController.text = details['landmark'] ?? '';
+        _cityController.text = details['city'] ?? '';
+        _stateController.text = details['state'] ?? '';
+        _pincodeController.text = details['pincode'] ?? '';
+        _selectedAddressType = args['label'] ?? 'Home';
+      }
+      _initialized = true;
+    }
+  }
+
+  Future<void> _detectLocation() async {
+    setState(() {
+      _isDetecting = true;
+    });
+    try {
+      final pos = await LocationService().getCurrentUserPosition();
+      final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        setState(() {
+          _houseController.text = place.name ?? place.street ?? '';
+          _areaController.text = place.subLocality ?? place.locality ?? '';
+          _cityController.text = place.locality ?? place.subAdministrativeArea ?? '';
+          _stateController.text = place.administrativeArea ?? '';
+          _pincodeController.text = place.postalCode ?? '';
+          _isDetecting = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isDetecting = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to auto-detect location: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -239,6 +297,30 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
+
+                // Use Current Location Button
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _isDetecting ? null : _detectLocation,
+                    icon: _isDetecting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.secondary),
+                          )
+                        : const Icon(Icons.my_location, size: 16, color: AppTheme.secondary),
+                    label: Text(
+                      _isDetecting ? 'Detecting Location...' : 'Use Current Location',
+                      style: const TextStyle(
+                        color: AppTheme.secondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Form Fields
                 Column(
@@ -466,11 +548,33 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
                   onPressed: _isFormValid
                       ? () {
                           if (_formKey.currentState!.validate()) {
-                            Navigator.pushNamedAndRemoveUntil(
-                              context,
-                              '/home',
-                              (route) => false,
-                            );
+                            final fullAddress = '${_houseController.text.trim()}, ${_areaController.text.trim()}${_floorController.text.trim().isNotEmpty ? ", ${_floorController.text.trim()}" : ""}${_landmarkController.text.trim().isNotEmpty ? ", ${_landmarkController.text.trim()}" : ""}, ${_cityController.text.trim()}, ${_stateController.text.trim()} ${_pincodeController.text.trim()}';
+                            final addressData = {
+                              'label': _selectedAddressType,
+                              'addressText': fullAddress,
+                              'details': {
+                                'house': _houseController.text.trim(),
+                                'area': _areaController.text.trim(),
+                                'floor': _floorController.text.trim(),
+                                'landmark': _landmarkController.text.trim(),
+                                'city': _cityController.text.trim(),
+                                'state': _stateController.text.trim(),
+                                'pincode': _pincodeController.text.trim(),
+                              }
+                            };
+                            
+                            final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+                            final bool isManageMode = args?['isManageMode'] ?? false;
+                            
+                            if (isManageMode) {
+                              Navigator.pop(context, addressData);
+                            } else {
+                              Navigator.pushNamedAndRemoveUntil(
+                                context,
+                                '/home',
+                                (route) => false,
+                              );
+                            }
                           }
                         }
                       : null,

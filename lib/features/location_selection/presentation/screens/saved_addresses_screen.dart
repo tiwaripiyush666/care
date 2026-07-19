@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/location/location_service.dart';
 
 class SavedAddressesScreen extends StatefulWidget {
   const SavedAddressesScreen({super.key});
@@ -13,7 +12,6 @@ class SavedAddressesScreen extends StatefulWidget {
 class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
   late Box _addressBox;
   bool _isBoxOpen = false;
-  final LocationService _locationService = LocationService();
 
   @override
   void initState() {
@@ -30,150 +28,62 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
     }
   }
 
-  void _showAddressDialog({String? key, Map<dynamic, dynamic>? existingData}) {
-    final labelController = TextEditingController(text: existingData?['label'] ?? '');
-    final addressController = TextEditingController(text: existingData?['addressText'] ?? '');
-    bool isDetecting = false;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppTheme.background,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.roundedLg),
-              ),
-              title: Text(
-                key == null ? 'Add Address' : 'Edit Address',
-                style: const TextStyle(
-                  color: AppTheme.primaryContainer,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: labelController,
-                      decoration: const InputDecoration(
-                        labelText: 'Label (e.g. Home, Work, Gym)',
-                        labelStyle: TextStyle(color: AppTheme.onSurfaceVariant),
-                        focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: AppTheme.primaryContainer),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: addressController,
-                      decoration: const InputDecoration(
-                        labelText: 'Full Address',
-                        labelStyle: TextStyle(color: AppTheme.onSurfaceVariant),
-                        focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: AppTheme.primaryContainer),
-                        ),
-                      ),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton.icon(
-                      onPressed: isDetecting
-                          ? null
-                          : () async {
-                              setDialogState(() => isDetecting = true);
-                              try {
-                                final pos = await _locationService.getCurrentUserPosition();
-                                final addr = await _locationService.getAddressFromCoordinates(
-                                  pos.latitude,
-                                  pos.longitude,
-                                );
-                                setDialogState(() {
-                                  addressController.text = addr;
-                                  isDetecting = false;
-                                });
-                              } catch (e) {
-                                setDialogState(() => isDetecting = false);
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Failed to detect location: $e'),
-                                      backgroundColor: AppTheme.error,
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                      icon: isDetecting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.secondary),
-                            )
-                          : const Icon(Icons.my_location, size: 16, color: AppTheme.secondary),
-                      label: Text(
-                        isDetecting ? 'Detecting Location...' : 'Use Current Location',
-                        style: const TextStyle(
-                          color: AppTheme.secondary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel', style: TextStyle(color: AppTheme.onSurfaceVariant)),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final label = labelController.text.trim();
-                    final addr = addressController.text.trim();
-                    if (label.isEmpty || addr.isEmpty) return;
-
-                    final itemKey = key ?? 'addr_${DateTime.now().millisecondsSinceEpoch}';
-                    await _addressBox.put(itemKey, {
-                      'label': label,
-                      'addressText': addr,
-                    });
-
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      setState(() {});
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryContainer,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.roundedMd),
-                    ),
-                  ),
-                  child: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            );
-          },
-        );
+  Future<void> _navigateToAddEdit({String? key, Map<dynamic, dynamic>? existingData}) async {
+    final result = await Navigator.pushNamed(
+      context,
+      '/location_manual',
+      arguments: {
+        'isManageMode': true,
+        'label': existingData?['label'],
+        'initialDetails': existingData?['details'],
       },
-    );
+    ) as Map<dynamic, dynamic>?;
+
+    if (result != null) {
+      final itemKey = key ?? 'addr_${DateTime.now().millisecondsSinceEpoch}';
+      await _addressBox.put(itemKey, result);
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(key == null ? 'Address added successfully' : 'Address updated successfully'),
+            backgroundColor: AppTheme.primaryContainer,
+          ),
+        );
+      }
+    }
   }
 
-  void _deleteAddress(String key) async {
-    await _addressBox.delete(key);
-    setState(() {});
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Address deleted successfully'),
-          backgroundColor: AppTheme.primaryContainer,
-        ),
-      );
-    }
+  void _confirmDelete(String key) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.background,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.roundedLg)),
+        title: const Text('Delete Address', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryContainer)),
+        content: const Text('Are you sure you want to delete this address? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.onSurfaceVariant)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await _addressBox.delete(key);
+              if (context.mounted) {
+                Navigator.pop(context);
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Address deleted successfully'), backgroundColor: AppTheme.primaryContainer),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
+            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -181,9 +91,7 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
     if (!_isBoxOpen) {
       return const Scaffold(
         backgroundColor: AppTheme.background,
-        body: Center(
-          child: CircularProgressIndicator(color: AppTheme.primaryContainer),
-        ),
+        body: Center(child: CircularProgressIndicator(color: AppTheme.primaryContainer)),
       );
     }
 
@@ -201,10 +109,7 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
         ),
         title: const Text(
           'Saved Addresses',
-          style: TextStyle(
-            color: AppTheme.primaryContainer,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: AppTheme.primaryContainer, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -213,24 +118,11 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.location_off, size: 64, color: AppTheme.outline),
+                    const Icon(Icons.location_off, size: 64, color: AppTheme.outline),
                     const SizedBox(height: 16),
-                    const Text(
-                      'No Saved Addresses',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.onSurface,
-                      ),
-                    ),
+                    const Text('No Saved Addresses', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Add locations to easily select them during booking.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.onSurfaceVariant,
-                      ),
-                    ),
+                    const Text('Add locations to easily select them during booking.', style: TextStyle(fontSize: 13, color: AppTheme.onSurfaceVariant)),
                   ],
                 ),
               )
@@ -240,6 +132,7 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
                 itemBuilder: (context, index) {
                   final key = items.keys.elementAt(index) as String;
                   final data = items[key] as Map<dynamic, dynamic>;
+                  final label = data['label']?.toString().toUpperCase() ?? 'OTHER';
 
                   return Card(
                     color: Colors.white,
@@ -247,7 +140,7 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppTheme.roundedMd),
-                      side: BorderSide(color: AppTheme.outlineVariant),
+                      side: const BorderSide(color: AppTheme.outlineVariant),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -261,40 +154,27 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
                               borderRadius: BorderRadius.circular(AppTheme.roundedSm),
                             ),
                             child: Text(
-                              data['label']?.toString().toUpperCase() ?? 'OTHER',
-                              style: const TextStyle(
-                                color: AppTheme.primaryContainer,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              label,
+                              style: const TextStyle(color: AppTheme.primaryContainer, fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  data['addressText'] ?? '',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: AppTheme.onSurface,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
+                            child: Text(
+                              data['addressText'] ?? '',
+                              style: const TextStyle(fontSize: 13, color: AppTheme.onSurface, fontWeight: FontWeight.w500),
                             ),
                           ),
                           const SizedBox(width: 12),
                           IconButton(
-                            onPressed: () => _showAddressDialog(key: key, existingData: data),
+                            onPressed: () => _navigateToAddEdit(key: key, existingData: data),
                             icon: const Icon(Icons.edit, size: 18, color: AppTheme.primaryContainer),
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                           ),
                           const SizedBox(width: 12),
                           IconButton(
-                            onPressed: () => _deleteAddress(key),
+                            onPressed: () => _confirmDelete(key),
                             icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.error),
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
@@ -307,7 +187,7 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
               ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddressDialog(),
+        onPressed: () => _navigateToAddEdit(),
         backgroundColor: AppTheme.primaryContainer,
         foregroundColor: Colors.white,
         child: const Icon(Icons.add),
