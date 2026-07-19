@@ -29,6 +29,7 @@ import 'features/care_booking/presentation/screens/booking_confirmation_screen.d
 import 'features/care_booking/presentation/screens/track_booking_screen.dart';
 import 'features/care_booking/presentation/screens/my_bookings_screen.dart';
 import 'features/registration/presentation/screens/account_settings_screen.dart';
+import 'features/registration/presentation/screens/refer_and_earn_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,6 +92,7 @@ class MyApp extends StatelessWidget {
           '/track_booking': (context) => const TrackBookingScreen(),
           '/bookings': (context) => const MyBookingsScreen(),
           '/profile': (context) => const AccountSettingsScreen(),
+          '/referral': (context) => const ReferAndEarnScreen(),
         },
       ),
     );

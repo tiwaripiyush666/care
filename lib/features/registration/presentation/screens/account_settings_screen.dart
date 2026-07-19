@@ -449,6 +449,13 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 title: 'Payment Methods',
                 subtitle: 'Secure checkout and billing',
               ),
+              const SizedBox(height: 8),
+              _buildSettingsRow(
+                icon: Icons.card_giftcard,
+                title: 'Refer & Earn',
+                subtitle: 'Invite friends and get care credits',
+                onTap: () => Navigator.pushNamed(context, '/referral'),
+              ),
               const SizedBox(height: 24),
 
               const Text(
