@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../auth/data/repositories/auth_repository_impl.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
   const AccountSettingsScreen({super.key});
@@ -10,6 +11,203 @@ class AccountSettingsScreen extends StatefulWidget {
 
 class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   int _currentNavIndex = 3; // Profile active
+  bool _biometricEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final storage = SecureStorageService();
+    final enabled = await storage.read('biometric_enabled_flag');
+    if (mounted) {
+      setState(() {
+        _biometricEnabled = enabled == 'true';
+      });
+    }
+  }
+
+  void _showSettingsModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(AppTheme.roundedLg),
+          topRight: Radius.circular(AppTheme.roundedLg),
+        ),
+      ),
+      builder: (BuildContext sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.containerMargin,
+                vertical: 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Settings & Preferences',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryContainer,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(color: AppTheme.outlineVariant),
+                  const SizedBox(height: 16),
+
+                  // Biometrics Switch Row
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryContainer.withAlpha(26),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.fingerprint,
+                          color: AppTheme.primaryContainer,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Biometric Login',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppTheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Sign in instantly with fingerprint or Face ID',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _biometricEnabled,
+                        activeThumbColor: AppTheme.secondary,
+                        activeTrackColor: AppTheme.secondaryContainer,
+                        inactiveThumbColor: AppTheme.outline,
+                        inactiveTrackColor: AppTheme.surfaceContainerHighest,
+                        onChanged: (bool value) async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final storage = SecureStorageService();
+                          await storage.write('biometric_enabled_flag', value.toString());
+                          await storage.write('biometric_preference_configured', 'true');
+                          
+                          setSheetState(() {
+                            _biometricEnabled = value;
+                          });
+                          
+                          setState(() {
+                            _biometricEnabled = value;
+                          });
+                          
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                value 
+                                    ? 'Biometric login enabled successfully' 
+                                    : 'Biometric login disabled successfully',
+                              ),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: AppTheme.primaryContainer,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(color: AppTheme.outlineVariant),
+                  const SizedBox(height: 16),
+
+                  // Simulated Push Notifications Switch Row
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryContainer.withAlpha(26),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.notifications_active,
+                          color: AppTheme.primaryContainer,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Push Notifications',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppTheme.onSurface,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Get alerts on provider booking status updates',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: true,
+                        activeThumbColor: AppTheme.secondary,
+                        activeTrackColor: AppTheme.secondaryContainer,
+                        onChanged: (bool value) {},
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +472,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 icon: Icons.settings,
                 title: 'Settings',
                 subtitle: 'Privacy and app preferences',
+                onTap: _showSettingsModal,
               ),
               const SizedBox(height: 24),
 
@@ -447,51 +646,56 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     required IconData icon,
     required String title,
     required String subtitle,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.roundedMd),
-        border: Border.all(color: AppTheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryContainer.withAlpha(26),
-              shape: BoxShape.circle,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.roundedMd),
+          border: Border.all(color: AppTheme.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryContainer.withAlpha(26),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppTheme.primaryContainer, size: 20),
             ),
-            child: Icon(icon, color: AppTheme.primaryContainer, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: AppTheme.onSurface,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppTheme.onSurface,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.onSurfaceVariant,
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const Icon(Icons.chevron_right, color: AppTheme.outlineVariant),
-        ],
+            const Icon(Icons.chevron_right, color: AppTheme.outlineVariant),
+          ],
+        ),
       ),
     );
   }
